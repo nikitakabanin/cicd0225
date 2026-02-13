@@ -1,0 +1,62 @@
+image: golang:1.23
+
+stages:
+  - build
+  - package
+  - release
+
+variables:
+  PACKAGE_NAME: 'factorialapp'
+  DEB_FILE: '${PACKAGE_NAME}-${CI_COMMIT_TAG}.deb'
+
+before_script:
+  - apt-get update && apt-get install -y dpkg-dev
+
+build-binary:
+  stage: build
+  script:
+    - go mod download
+    - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ${PACKAGE_NAME} ./main
+  artifacts:
+    paths:
+      - ${PACKAGE_NAME}
+  only:
+    - tags
+
+build-deb:
+  stage: package
+  dependencies:
+    - build-binary
+  script:
+    - mkdir -p build/DEBIAN build/usr/bin
+    - |
+      cat > build/DEBIAN/control <<EOF
+      Package: ${PACKAGE_NAME}
+      Version: ${CI_COMMIT_TAG}
+      Section: utils
+      Priority: optional
+      Architecture: amd64
+      Maintainer: Nikita Kabanin <kneketsky@gmail.com>
+      Description: Factorial App
+       BSTU VOENMEH
+      EOF
+    - cp ${PACKAGE_NAME} build/usr/bin/
+    - chmod 755 build/usr/bin/${PACKAGE_NAME}
+    - dpkg-deb --build --root-owner-group build ${DEB_FILE}
+  artifacts:
+    paths:
+      - ${DEB_FILE}
+  only:
+    - tags
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  dependencies:
+    - build-deb
+  script:
+    - |
+      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"${DEB_FILE}\",\"url\":\"${CI_PROJECT_URL}/-/jobs/${CI_JOB_ID}/artifacts/file/${DEB_FILE}\"}"
+  only:
+    - tags
