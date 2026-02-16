@@ -24,11 +24,6 @@ jobs:
           go-version: '1.21'
           check-latest: true
 
-      - name: Install dependencies
-        run: |
-          go mod download
-          go mod verify
-
       - name: Build Go binary from main/main.go
         run: |
           # Build for Linux amd64 - specifying the main.go path
